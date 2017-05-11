@@ -36,7 +36,7 @@ def _onUpload(event):
     """
     try:
         ref = json.loads(event.info.get('reference'))
-    except ValueError:
+    except (ValueError, TypeError):
         return
 
     if isinstance(ref, dict) and ref.get('type') == 'item_tasks.output':
@@ -53,9 +53,14 @@ def _onUpload(event):
         file = event.info['file']
         item = ModelImporter.model('item').load(file['itemId'], force=True)
 
+        # Add link to job model to the output item
         jobModel.updateJob(job, otherFields={
             'itemTaskBindings.outputs.%s.itemId' % ref['id']: item['_id']
         })
+
+        # Also a link in the item to the job that created it
+        item['createdByJob'] = job['_id']
+        ModelImporter.model('item').save(item)
 
 
 def load(info):
@@ -67,6 +72,7 @@ def load(info):
         'Create new CLIs via automatic introspection.', admin=True)
 
     ModelImporter.model('item').ensureIndex(['meta.isItemTask', {'sparse': True}])
+    ModelImporter.model('item').exposeFields(level=AccessType.READ, fields='createdByJob')
     ModelImporter.model('job', 'jobs').exposeFields(level=AccessType.READ, fields={
         'itemTaskId', 'itemTaskBindings'})
 

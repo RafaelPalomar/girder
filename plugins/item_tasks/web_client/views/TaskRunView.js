@@ -1,7 +1,10 @@
-import WidgetModel from '../models/WidgetModel';
+import _ from 'underscore';
+
 import WidgetCollection from '../collections/WidgetCollection';
 import ControlsPanel from './ControlsPanel';
 import View from 'girder/views/View';
+import FolderModel from 'girder/models/FolderModel';
+import ItemModel from 'girder/models/ItemModel';
 import router  from 'girder/router';
 import { restRequest } from 'girder/rest';
 import { renderMarkdown } from 'girder/misc';
@@ -14,33 +17,25 @@ const TaskRunView = View.extend({
         'click .g-run-task': 'execute'
     },
 
-    initialize: function () {
+    initialize: function (settings) {
         this._taskSpec = this.model.get('meta').itemTaskSpec || {};
         this._inputs = this._taskSpec.inputs || [];
         this._outputs = this._taskSpec.outputs || [];
         this._inputWidgets = new WidgetCollection();
         this._outputWidgets = new WidgetCollection();
+        this._initialValues = settings.initialValues || null;
+
+        const inputs = this._initialValues && this._initialValues.inputs || {};
+        const outputs = this._initialValues && this._initialValues.outputs || {};
 
         // Build all the widget models from the task IO spec
-        this._inputWidgets.add(this._inputs.map((input) => {
-            return new WidgetModel({
-                type: input.type,
-                title: input.name || input.id,
-                id: input.id || input.name,
-                description: input.description || '',
-                values: input.values,
-                value: input.default && input.default.data
-            });
-        }));
+        this._inputWidgets.add(
+            this._inputs.map((input) => this._setJobInfo(input, inputs))
+        );
 
-        this._outputWidgets.add(this._outputs.map((output) => {
-            return new WidgetModel({
-                type: output.type,
-                title: output.name || output.id,
-                id: output.id || output.name,
-                description: output.description || ''
-            });
-        }));
+        this._outputWidgets.add(
+            this._outputs.map((output) => this._setJobInfo(output, outputs))
+        );
 
         this._inputsPanel = new ControlsPanel({
             title: 'Configure inputs',
@@ -53,6 +48,33 @@ const TaskRunView = View.extend({
             collection: this._outputWidgets,
             parentView: this
         });
+    },
+
+    /**
+     * Fill in values according to an existing job.
+     *
+     * @param {object} spec The task parameter spec
+     * @param {object} bindings The job parameter bindings
+     */
+    _setJobInfo: function (spec, bindings) {
+        const match = bindings[spec.id || spec.name] || {};
+        if (match.mode === 'girder' && match.resource_type === 'item') {
+            spec.value = new ItemModel({
+                _id: match.id,
+                _modelType: 'item',
+                name: match.fileName || match.id
+            });
+            spec.fileName = match.fileName || match.id;
+        } else if (match.mode === 'girder' && match.parent_type === 'folder') {
+            spec.value = new FolderModel({
+                _id: match.parent_id,
+                _modelType: 'folder'
+            });
+            spec.fileName = match.name || match.id;
+        } else if (_.has(match, 'data')) {
+            spec.value = match.data;
+        }
+        return spec;
     },
 
     render: function () {
@@ -119,13 +141,15 @@ const TaskRunView = View.extend({
                     return {
                         mode: 'girder',
                         resource_type: 'file',
-                        id: val.id
+                        id: val.id,
+                        fileName: model.get('fileName') || null
                     };
                 case 'file': // This is an input
                     return {
                         mode: 'girder',
                         resource_type: 'item',
-                        id: val.id
+                        id: val.id,
+                        fileName: model.get('fileName') || null
                     };
                 case 'new-file': // This is an output
                     return {

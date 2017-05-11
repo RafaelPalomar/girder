@@ -106,6 +106,10 @@ describe('Run the item task', function () {
     });
 
     it('configure task inputs', function () {
+        expect($('input[name="MaximumRadius"]').val()).toBe('20');
+
+        $('input[name="MaximumRadius"]').val('12').trigger('change');
+
         $('.g-inputs-container .g-select-file-button').click();
         girderTest.waitForDialog();
 
@@ -146,10 +150,29 @@ describe('Run the item task', function () {
         girderTest.waitForDialog();
 
         waitsFor(function () {
+            return $('.modal-dialog .g-hierarchy-widget').length > 0;
+        }, 'hierarchy widget to appear');
+
+        runs(function () {
+            // we should be in the parent folder selected before
+            expect($('.modal-dialog a.g-breadcrumb-link').length).toBe(1);
+
+            // go back to the user's main path
+            $('.modal-dialog a.g-breadcrumb-link:first').click();
+
+            // Select our user from the root selector
+            var id = $('.modal-dialog #g-root-selector option:not([disabled]):first').attr('value');
+            $('.modal-dialog #g-root-selector').val(id).trigger('change');
+        });
+
+        waitsFor(function () {
             return $('.modal-dialog .g-folder-list-link').length === 2;
         }, 'user public and private folder to appear in the list');
 
         runs(function () {
+            // check invalid parent
+            $('.modal-dialog .g-submit-button').click();
+            expect($('.g-validation-failed-message').text()).toMatch(/Invalid parent type/);
             $('.modal-dialog .g-folder-list-link:first').click();
         });
 
@@ -158,14 +181,15 @@ describe('Run the item task', function () {
         }, 'folder nav in output selection widget');
 
         runs(function () {
+            // check no name provided
+            $('.modal-dialog .g-submit-button').click();
+            expect($('.g-validation-failed-message').text()).toMatch(/Please provide an item name/);
+
+            $('#g-input-element').val('out.txt');
             $('.modal-dialog .g-submit-button').click();
         });
 
         girderTest.waitForLoad();
-
-        runs(function () {
-            $('.g-outputs-container input[name="DetectedPoints"]').val('out.txt').trigger('change');
-        });
     });
 
     it('run the task', function () {
@@ -178,6 +202,86 @@ describe('Run the item task', function () {
         runs(function () {
             expect($('.g-item-task-inputs-container ul>li').length).toBe(9);
             expect($('.g-item-task-outputs-container ul>li').length).toBe(1);
+            expect($('.g-input-value[input-id="--MaximumRadius"]').text()).toBe('12');
+        });
+    });
+
+    it('Reconfigure task from previous execution details', function () {
+        window.location.assign($('.g-item-task-setup-again a').attr('href'));
+
+        waitsFor(function () {
+            return $('input[name="MaximumRadius"]').val() === '12';
+        }, 'task run view to display with same parameters');
+
+        runs(function () {
+            // Make sure item name displays properly
+            expect($('input[name="InputImage"]').val()).toBe('PET phantom detector CLI');
+        });
+    });
+});
+
+describe('Auto-configure the JSON item task folder', function () {
+    it('go to collection page', function () {
+        $('ul.g-global-nav .g-nav-link[g-target="collections"]').click();
+    });
+
+    it('create collection and folder', girderTest.createCollection('json task test', '', 'tasks'));
+
+    it('navigate to the folder', function () {
+        runs(function () {
+            $('.g-folder-list-link').click();
+        });
+
+        waitsFor(function () {
+            return $('.g-empty-parent-message:visible').length > 0;
+        }, 'folder empty list to appear');
+    });
+
+    it('run configuration job', function () {
+        $('.g-folder-actions-button').click();
+        $('.g-folder-actions-menu .g-create-docker-tasks').click();
+
+        girderTest.waitForDialog();
+
+        runs(function () {
+            $('.modal-dialog .g-configure-docker-image').val('me/my_image:latest');
+            $('.modal-dialog button.btn.btn-success[type="submit"]').click();
+        });
+
+        waitsFor(function () {
+            return $('.g-job-info-key').length > 0;
+        }, 'navigation to the configuration job');
+
+        waitsFor(function () {
+            return $('.g-job-status-badge').attr('status') === 'success';
+        }, 'job success status', 10000);
+    });
+});
+
+
+describe('Navigate to the new JSON task', function () {
+    it('navigate to task', function () {
+        $('.g-nav-link[g-target="item_tasks"]').click();
+
+        waitsFor(function (){
+            return $('.g-execute-task-link').length > 0;
+        }, 'task list to be rendered');
+
+        runs(function () {
+            expect($('.g-execute-task-link').length).toBe(3);
+            expect($('.g-execute-task-link').eq(0).text()).toBe('me/my_image:latest 0');
+            expect($('.g-execute-task-link').eq(1).text()).toBe('me/my_image:latest 1');
+            window.location.assign($('a.g-execute-task-link').eq(0).attr('href'));
+        });
+
+        waitsFor(function () {
+            return $('.g-task-description-container').length > 0;
+        }, 'task run view to display');
+
+        runs(function () {
+            expect($('.g-task-description-container').text()).toContain(
+                'Task 1 description');
+            expect($('.g-inputs-container').length).toBe(0);
         });
     });
 });

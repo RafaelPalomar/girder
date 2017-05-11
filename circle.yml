@@ -22,7 +22,7 @@ dependencies:
     - ./scripts/install_cmake.sh
     - npm config set progress false
     - npm update; npm prune
-    - set -o pipefail; pyenv exec pip install -U pip | cat
+    - set -o pipefail; pyenv exec pip install -U pip setuptools | cat
     - set -o pipefail; pyenv exec pip install -r requirements-dev.txt -e .[plugins,sftp] -e clients/python | cat
     - pyenv rehash
     - set -o pipefail; pyenv exec girder-install web --all-plugins --dev | cat
@@ -38,3 +38,9 @@ deployment:
     owner: girder
     commands:
       - curl 'https://doc.esdoc.org/api/create' -X POST --data-urlencode "gitUrl=git@github.com:girder/girder.git"
+
+  ansible_galaxy:
+    branch: master
+    owner: girder
+    commands:
+      - ./scripts/galaxy_deploy.sh

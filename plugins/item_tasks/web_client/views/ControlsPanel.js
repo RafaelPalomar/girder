@@ -8,6 +8,7 @@ var ControlsPanel = Panel.extend({
     initialize: function (settings) {
         this.title = settings.title || '';
         this.advanced = settings.advanced || false;
+        this.initialValues = settings.initialValues || null;
         this.listenTo(this.collection, 'add', this.addOne);
         this.listenTo(this.collection, 'reset', this.render);
         this.listenTo(this.collection, 'remove', this.removeWidget);
@@ -20,6 +21,9 @@ var ControlsPanel = Panel.extend({
             id: this.$el.attr('id')
         }));
         this.addAll();
+
+        // initialize collapseable elements
+        this.$('.g-panel-content').collapse({toggle: false});
     },
 
     addOne: function (model) {

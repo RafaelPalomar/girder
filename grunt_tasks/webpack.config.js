@@ -36,20 +36,6 @@ function fileLoader() {
     };
 }
 
-function urlLoader(options) {
-    options = options || {};
-    var loader = {
-        loader: 'url-loader',
-        query: {
-            limit: 4096
-        }
-    };
-    if (options.mimetype) {
-        loader.query.mimetype = options.mimetype;
-    }
-    return loader;
-}
-
 function _coverageConfig() {
     try {
         var istanbulPlugin = require.resolve('babel-plugin-istanbul');
@@ -81,7 +67,9 @@ module.exports = {
             jQuery: 'jquery',
             $: 'jquery',
             'window.jQuery': 'jquery'
-        })
+        }),
+        // Disable writing the output file if a build error occurs
+        new webpack.NoEmitOnErrorsPlugin()
     ],
     module: {
         loaders: [
@@ -109,9 +97,9 @@ module.exports = {
                 test: /\.styl$/,
                 include: loaderPaths,
                 loaders: ExtractTextPlugin.extract({
-                    fallbackLoader: 'style-loader',
+                    fallback: 'style-loader',
                     // stylus loader query must be a string for now
-                    loader: ['css-loader', 'stylus-loader?resolve url=true']
+                    use: ['css-loader', 'stylus-loader?resolve url=true']
                 })
             },
             // CSS
@@ -119,8 +107,8 @@ module.exports = {
                 test: /\.css$/,
                 include: loaderPathsNodeModules,
                 loaders: ExtractTextPlugin.extract({
-                    fallbackLoader: 'style-loader',
-                    loader: ['css-loader']})
+                    fallback: 'style-loader',
+                    use: ['css-loader']})
             },
             // Pug
             {
@@ -149,7 +137,6 @@ module.exports = {
                 test: /\.woff(\?v=\d+\.\d+\.\d+)?$/,
                 include: loaderPathsNodeModules,
                 loaders: [
-                    urlLoader({ mimetype: 'application/font-woff' }),
                     fileLoader()
                 ]
             },
@@ -158,7 +145,6 @@ module.exports = {
                 test: /\.woff2(\?v=\d+\.\d+\.\d+)?$/,
                 include: loaderPathsNodeModules,
                 loaders: [
-                    urlLoader({ mimetype: 'application/font-woff2' }),
                     fileLoader()
                 ]
             },
@@ -167,7 +153,6 @@ module.exports = {
                 test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/,
                 include: loaderPathsNodeModules,
                 loaders: [
-                    urlLoader({ mimetype: 'application/octet-stream' }),
                     fileLoader()
                 ]
             },
@@ -184,7 +169,6 @@ module.exports = {
                 test: /\.svg(\?v=\d+\.\d+\.\d+)?$/,
                 include: loaderPathsNodeModules,
                 loaders: [
-                    urlLoader({ mimetype: 'image/svg+xml' }),
                     fileLoader()
                 ]
             }

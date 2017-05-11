@@ -5,8 +5,10 @@
 var girderTest = girderTest || {};
 
 window.alert = function (msg) {
-    // alerts block phantomjs and will destroy us.
-    console.log(msg);
+    // We want to have no alerts in the code-base; alerts block phantomjs and
+    // will destroy us.
+    console.error(msg);
+    expect('Alert was used').toBe('Alerts should not be present');
 };
 
 // Timeout to wait for asynchronous actions
@@ -189,7 +191,7 @@ girderTest.createCollection = function (collName, collDesc, createFolderName) {
         if (createFolderName) {
             waitsFor(function () {
                 return $('.g-create-subfolder').length > 0;
-            }, 'hierarchy widget to laod');
+            }, 'hierarchy widget to load');
 
             runs(function () {
                 return $('.g-create-subfolder').click();
@@ -818,33 +820,8 @@ function _prepareTestUpload() {
     girderTest.getCallbackSuffix();
 
     (function (impl) {
-        FormData.prototype.append = function (name, value, filename) {
-            this.vals = this.vals || {};
-            if (filename) {
-                this.vals[name + '_filename'] = value;
-            }
-            this.vals[name] = value;
-            impl.call(this, name, value, filename);
-        };
-    }(FormData.prototype.append));
-
-    (function (impl) {
         XMLHttpRequest.prototype.send = function (data) {
-            if (data && data instanceof FormData) {
-                var newdata = new FormData();
-                newdata.append('offset', data.vals.offset);
-                newdata.append('uploadId', data.vals.uploadId);
-                var len = data.vals.chunk.size;
-                if (girderTest._uploadData.length &&
-                    girderTest._uploadData.length === len &&
-                    !girderTest._uploadDataExtra) {
-                    newdata.append('chunk', girderTest._uploadData);
-                } else {
-                    newdata.append('chunk', new Array(
-                        len + 1 + girderTest._uploadDataExtra).join('-'));
-                }
-                data = newdata;
-            } else if (data && data instanceof Blob) {
+            if (data && data instanceof Blob) {
                 if (girderTest._uploadDataExtra) {
                     /* Our mock S3 server will take extra data, so break it
                      * by adding a faulty copy header.  This will throw an
@@ -1054,7 +1031,7 @@ girderTest.testUploadDropAction = function (itemSize, multiple, selector, dropAc
     _prepareTestUpload();
 
     runs(function () {
-        $(selector).trigger($.Event('dragenter', {originalEvent: {dataTransfer: {}}}));
+        $(selector).trigger($.Event('dragenter', {originalEvent: $.Event('dragenter', {dataTransfer: {}})}));
     });
 
     waitsFor(function () {
@@ -1070,7 +1047,7 @@ girderTest.testUploadDropAction = function (itemSize, multiple, selector, dropAc
     }, 'the drop bullseye to disappear');
 
     runs(function () {
-        $(selector).trigger($.Event('dragenter', {originalEvent: {dataTransfer: {}}}));
+        $(selector).trigger($.Event('dragenter', {originalEvent: $.Event('dragenter', {dataTransfer: {}})}));
     });
 
     waitsFor(function () {
@@ -1079,8 +1056,8 @@ girderTest.testUploadDropAction = function (itemSize, multiple, selector, dropAc
 
     runs(function () {
         /* Try dropping nothing */
-        $(selector).trigger($.Event('dragover', {originalEvent: {dataTransfer: {}}}));
-        $(selector).trigger($.Event('drop', {originalEvent: {dataTransfer: {files: []}}}));
+        $(selector).trigger($.Event('dragover', {originalEvent: $.Event('dragover', {dataTransfer: {}})}));
+        $(selector).trigger($.Event('drop', {originalEvent: $.Event('drop', {dataTransfer: {files: []}})}));
     });
 
     waitsFor(function () {
@@ -1088,7 +1065,7 @@ girderTest.testUploadDropAction = function (itemSize, multiple, selector, dropAc
     }, 'the drop bullseye to disappear');
 
     runs(function () {
-        $(selector).trigger($.Event('dragenter', {originalEvent: {dataTransfer: {}}}));
+        $(selector).trigger($.Event('dragenter', {originalEvent: $.Event('dragenter', {dataTransfer: {}})}));
     });
 
     waitsFor(function () {
@@ -1096,7 +1073,7 @@ girderTest.testUploadDropAction = function (itemSize, multiple, selector, dropAc
     }, 'the drop bullseye to appear');
 
     runs(function () {
-        $(selector).trigger($.Event('drop', {originalEvent: {dataTransfer: {files: files}}}));
+        $(selector).trigger($.Event('drop', {originalEvent: $.Event('drop', {dataTransfer: {files: files}})}));
     });
 };
 
