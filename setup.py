@@ -63,6 +63,7 @@ install_reqs = [
     'bcrypt',
     'boto',
     'CherryPy',
+    'filelock',
     'jsonschema',
     'Mako',
     'pymongo>=3',
@@ -79,6 +80,7 @@ extras_reqs = {
     'dicom_viewer': ['pydicom'],
     'geospatial': ['geojson'],
     'item_tasks': ['ctk-cli'],
+    'ldap': ['pyldap'],
     'thumbnails': ['Pillow', 'pydicom', 'numpy'],
     'worker': ['celery']
 }

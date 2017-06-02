@@ -1,3 +1,4 @@
+import $ from 'jquery';
 import _ from 'underscore';
 
 import WidgetCollection from '../collections/WidgetCollection';
@@ -129,12 +130,12 @@ const TaskRunView = View.extend({
             return;
         }
         this.$('.g-validation-failed-message').empty();
-        $(e.currentTarget).attr('disabled', 'true').addClass('disabled');
+        $(e.currentTarget).girderEnable(false);
 
         const inputs = {}, outputs = {};
 
         const translate = (model) => {
-            const val = model.value();
+            let val = model.value();
 
             switch (model.get('type')) {
                 case 'image': // This is an input
@@ -159,9 +160,12 @@ const TaskRunView = View.extend({
                         name: model.get('fileName')
                     };
                 default:
+                    if (model.isVector()) {
+                        val = val.join(',');
+                    }
                     return {
                         mode: 'inline',
-                        data: model.value()
+                        data: val
                     };
             }
         };
@@ -183,8 +187,8 @@ const TaskRunView = View.extend({
             error: null
         }).done((resp) => {
             router.navigate(`job/${resp._id}`, {trigger: true});
-        }).error((resp) => {
-            $(e.currentTarget).attr('disabled', null).removeClass('disabled');
+        }).fail((resp) => {
+            $(e.currentTarget).girderEnable(true);
             this.$('.g-validation-failed-message').text('Error: ' + resp.responseJSON.message);
         });
     }

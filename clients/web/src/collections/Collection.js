@@ -129,8 +129,7 @@ var Collection = Backbone.Collection.extend({
      */
     fetch: function (params, reset) {
         if (this.altUrl === null && this.resourceName === null) {
-            console.error('Error: You must set an altUrl or resourceName on your collection.');
-            return;
+            throw new Error('An altUrl or resourceName must be set on the Collection.');
         }
 
         if (this.filterFunc && !this.append) {
@@ -165,7 +164,7 @@ var Collection = Backbone.Collection.extend({
                 }, this.params)
             });
 
-            var result = $.when(xhr).then((list) => {
+            var result = xhr.then((list) => {
                 if (this.pageLimit > 0 && list.length > this.pageLimit) {
                     // This means we have more pages to display still. Pop off
                     // the extra that we fetched.

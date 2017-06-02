@@ -26,10 +26,15 @@ module.exports = function (grunt) {
     var ExtractTextPlugin = require('extract-text-webpack-plugin');
     var webpack = require('webpack');
     var paths = require('./webpack.paths.js');
+    var webpackPlugins = require('./webpack.plugins.js');
 
-    var buildAll = grunt.option('all-plugins');
     var configurePlugins = grunt.option('configure-plugins');
     var plugins = grunt.option('plugins');
+
+    if (grunt.option('all-plugins')) {
+        grunt.fail.warn(
+            'The --all-plugins option no longer works, use `girder-install web --all-plugins` instead.');
+    }
 
     if (_.isString(plugins) && plugins) {
         plugins = plugins.split(',');
@@ -43,7 +48,7 @@ module.exports = function (grunt) {
         configurePlugins = [];
     }
 
-    if (!buildAll && !plugins.length && !configurePlugins.length) {
+    if (!plugins.length && !configurePlugins.length) {
         return;
     }
 
@@ -152,7 +157,7 @@ module.exports = function (grunt) {
         // the user can control whether this is a "Girder client extension" or
         // just a standalone web client.
         var output = config.webpack && config.webpack.output || 'plugin';
-
+        var deps = config.dependencies || [];
         var pluginNodeDir = path.join(getPluginLocalNodePath(plugin), 'node_modules');
 
         // Add webpack target and name resolution for this plugin if
@@ -167,7 +172,7 @@ module.exports = function (grunt) {
             };
         } else if (_.isEmpty(mains)) {
             // By default, use web_client/main.js if it exists.
-            var mainJs = path.join(webClient, 'main.js');
+            var mainJs = path.resolve(webClient, 'main.js');
 
             if (fs.existsSync(mainJs)) {
                 mains = {
@@ -178,7 +183,7 @@ module.exports = function (grunt) {
 
         _.each(mains, (main, output) => {
             if (!path.isAbsolute(main)) {
-                main = path.join(dir, main);
+                main = path.resolve(dir, main);
             }
             if (!fs.existsSync(main)) {
                 throw new Error(`Entry point file ${main} not found.`);
@@ -224,7 +229,8 @@ module.exports = function (grunt) {
                     },
                     output: {
                         path: path.join(paths.web_built, 'plugins', plugin),
-                        filename: `${output}.min.js`
+                        filename: `${output}.min.js`,
+                        library: `girder_plugin_${plugin}`
                     },
                     resolve: {
                         modules: [
@@ -237,15 +243,38 @@ module.exports = function (grunt) {
                         ]
                     },
                     plugins: [
+                        // DllPlugin causes the plugin bundle to build a manifest so that
+                        // downstream bundles can share its modules at runtime rather
+                        // than copying them in statically.
+                        new webpack.DllPlugin({
+                            path: path.join(paths.web_built, 'plugins', plugin, `${output}-manifest.json`),
+                            name: `girder_plugin_${plugin}`
+                        }),
+                        // DllBootstrapPlugin allows the same plugin bundle to also
+                        // execute an entry point at load time instead of just exposing symbols
+                        // as a library.
+                        new webpackPlugins.DllBootstrapPlugin({
+                            [helperConfig.pluginEntry]: main
+                        }),
+                        // This plugin allows this bundle to dynamically link against girder's
+                        // core library bundle.
                         new webpack.DllReferencePlugin({
                             context: '.',
                             manifest: path.join(paths.web_built, 'girder_lib-manifest.json')
                         }),
+                        // This plugin pulls the CSS out of the bundle and into a separate file.
                         new ExtractTextPlugin({
                             filename: `${output}.min.css`,
                             allChunks: true
                         })
-                    ]
+                    ].concat(_.map(deps, dep => {
+                        // This dynamically links the current plugin against its
+                        // dependencies' bundles so they can share code.
+                        return new webpack.DllReferencePlugin({
+                            context: '.',
+                            manifest: path.join(paths.web_built, 'plugins', dep, 'plugin-manifest.json')
+                        });
+                    }))
                 };
                 configOpts.default = {
                     [`webpack:${output}_${plugin}`]: {
@@ -260,9 +289,9 @@ module.exports = function (grunt) {
             // explicitly set to anything besides false, then augment the
             // webpack loader configurations with the plugin source directory.
             if (!config.webpack || config.webpack.defaultLoaders === undefined || config.webpack.defaultLoaders !== false) {
-                var numLoaders = grunt.config.get('webpack.options.module.loaders').length;
+                var numLoaders = grunt.config.get('webpack.options.module.rules').length;
                 for (var i = 0; i < numLoaders; i++) {
-                    var selector = 'webpack.options.module.loaders.' + i + '.include';
+                    var selector = `webpack.options.module.rules.${i}.resource.include`;
                     var loaders = grunt.config.get(selector) || [];
                     var pluginPath = path.resolve(dir);
                     var realPath = fs.realpathSync(dir);
@@ -279,7 +308,17 @@ module.exports = function (grunt) {
                 }
             }
 
-            var newConfig = webpackHelper(grunt.config.getRaw('webpack.options'), helperConfig);
+            var baseConfig = grunt.config.getRaw('webpack.options');
+            baseConfig.module.loaders = [];
+            var newConfig = webpackHelper(baseConfig, helperConfig);
+            if (_.has(newConfig.module, 'loaders')) {
+                if (!_.isEmpty(newConfig.module.loaders)) {
+                    grunt.log.writeln(`  >> "module.loaders" is deprecated, use "module.rules" in ${webpackHelperFile} instead.`.yellow);
+                    newConfig.module.rules = newConfig.module.rules || [];
+                    newConfig.module.rules = newConfig.module.rules.concat(newConfig.module.loaders);
+                }
+                delete newConfig.module.loaders;
+            }
             grunt.config.set('webpack.options', newConfig);
         });
 
@@ -310,7 +349,10 @@ module.exports = function (grunt) {
             // Get the list of the packages to install and append them to the
             // args object.
             var modules = Array.prototype.slice.call(arguments, 2);
-            args = args.concat(['install'], modules);
+
+            // npm@5 saves dependencies to package.json by default, add
+            // the --no-save flag to disable this behavior
+            args = args.concat(['install', '--no-save'], modules);
 
             // Launch the child process.
             child = child_process.spawnSync('npm', args, {
@@ -417,22 +459,14 @@ module.exports = function (grunt) {
         }
     };
 
-    // Glob for plugins and configure each one to be built
-    if (buildAll) {
-        // Glob for plugins and configure each one to be built
-        grunt.file.expand(grunt.config.get('pluginDir') + '/*').forEach(function (dir) {
-            configurePluginForBuilding(path.resolve(dir), true);
-        });
-    } else {
-        // Configure only the plugins that were requested via --configure-plugins
-        configurePlugins.forEach(function (name) {
-            configurePluginForBuilding(path.resolve(grunt.config.get('pluginDir'), name), false);
-        });
-        // Build only the plugins that were requested via --plugins
-        plugins.forEach(function (name) {
-            configurePluginForBuilding(path.resolve(grunt.config.get('pluginDir'), name), true);
-        });
-    }
+    // Configure the plugins that were requested via --configure-plugins in order
+    configurePlugins.forEach(function (name) {
+        configurePluginForBuilding(path.resolve(grunt.config.get('pluginDir'), name), false);
+    });
+    // Build the plugins that were requested via --plugins in order
+    plugins.forEach(function (name) {
+        configurePluginForBuilding(path.resolve(grunt.config.get('pluginDir'), name), true);
+    });
 
     /**
      * Register a "meta" task that will configure and run other tasks

@@ -588,6 +588,9 @@ girderTest.waitForLoad = function (desc) {
         return !$('.modal').data('bs.modal').$backdrop;
     }, 'any modal dialog to be hidden' + desc);
     waitsFor(function () {
+        return !girder._inTransition;
+    }, 'transitions to finish');
+    waitsFor(function () {
         return girder.rest.numberOutstandingRestRequests() === 0;
     }, 'rest requests to finish' + desc);
     waitsFor(function () {
@@ -613,6 +616,9 @@ girderTest.waitForDialog = function (desc) {
             $('#g-dialog-container:visible').length > 0;
     }, 'a dialog to fully render' + desc);
     waitsFor(function () {
+        return !girder._inTransition;
+    }, 'dialog transitions to finish');
+    waitsFor(function () {
         return girder.rest.numberOutstandingRestRequests() === 0;
     }, 'dialog rest requests to finish' + desc);
 };
@@ -630,7 +636,11 @@ girderTest.addScript = function (url) {
     girderTest.promise.then(function () {
         $.getScript(url).done(function () {
             defer.resolve();
+        }).fail(function () {
+            defer.reject('Failed to load script: ' + url);
         });
+    }).fail(function () {
+        defer.reject.apply(defer, arguments);
     });
     girderTest.promise = defer.promise();
 };
@@ -747,7 +757,7 @@ girderTest.binaryUpload = function (path) {
             }
         }).done(function (resp) {
             file = resp;
-        }).error(function (resp) {
+        }).fail(function (resp) {
             console.log('Could not complete simulated upload of ' + path + ' to ' + folderId);
             console.log(resp.responseJSON.message);
         });
@@ -1219,13 +1229,38 @@ $(function () {
 girderTest.startApp = function () {
     var defer = new $.Deferred();
     girderTest.promise.then(function () {
+        /* Track bootstrap transitions.  This is largely a duplicate of the
+         * Bootstrap emulateTransitionEnd function, with the only change being
+         * our tracking of the transition.  This still relies on the browser
+         * possibly firing css transition end events, with this function as a
+         * fail-safe. */
+        $.fn.emulateTransitionEnd = function (duration) {
+            girder._inTransition = true;
+            var called = false;
+            var $el = this;
+            $(this).one('bsTransitionEnd', function () { called = true; });
+            var callback = function () {
+                if (!called) {
+                    $($el).trigger($.support.transition.end);
+                }
+                girder._inTransition = false;
+            };
+            setTimeout(callback, duration);
+            return this;
+        };
+
         girder.events.trigger('g:appload.before');
         var app = new girder.views.App({
             el: 'body',
-            parentView: null
+            parentView: null,
+            start: false
         });
-        girder.events.trigger('g:appload.after');
-        defer.resolve(app);
+        app.start().then(function () {
+            girder.events.trigger('g:appload.after');
+            defer.resolve(app);
+        });
+    }).fail(function () {
+        defer.reject.apply(defer, arguments);
     });
     girderTest.promise = defer.promise();
     return girderTest.promise;

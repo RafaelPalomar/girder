@@ -215,6 +215,7 @@ var HierarchyWidget = View.extend({
         this.itemListView = new ItemListWidget({
             itemFilter: this._itemFilter,
             folderId: this.parentModel.get('_id'),
+            public: this.parentModel.get('public'),
             accessLevel: this.parentModel.getAccessLevel(),
             checkboxes: this._checkboxes,
             downloadLinks: this._downloadLinks,
@@ -290,7 +291,7 @@ var HierarchyWidget = View.extend({
 
         if (this.$('.g-folder-actions-menu>li>a').length === 0) {
             // Disable the actions button if actions list is empty
-            this.$('.g-folder-actions-button').attr('disabled', 'disabled');
+            this.$('.g-folder-actions-button').girderEnable(false);
         }
 
         this.breadcrumbView.setElement(this.$('.g-hierarchy-breadcrumb-bar>ol')).render();
@@ -299,6 +300,7 @@ var HierarchyWidget = View.extend({
         this.folderListView.setElement(this.$('.g-folder-list-container')).render();
 
         if (this.parentModel.resourceName === 'folder' && this._showItems) {
+            this._initFolderViewSubwidgets();
             this.itemListView.setElement(this.$('.g-item-list-container')).render();
             this.metadataWidget.setItem(this.parentModel);
             if (this._showMetadata) {
@@ -680,12 +682,9 @@ var HierarchyWidget = View.extend({
             }
         }
 
-        if (folders.length + items.length) {
-            // Disable folder actions if checkboxes are checked
-            this.$('.g-folder-actions-button').attr('disabled', 'disabled');
-        } else {
-            this.$('.g-folder-actions-button').removeAttr('disabled');
-        }
+        // Disable folder actions if checkboxes are checked
+        let anyChecked = folders.length + items.length > 0;
+        this.$('.g-folder-actions-button').girderEnable(!anyChecked);
 
         this.checkedMenuWidget.update({
             minFolderLevel: minFolderLevel,
